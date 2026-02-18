@@ -246,7 +246,14 @@ fn build_java_args(root_dir: Option<&str>) -> Vec<String> {
     let mut args = vec![
         "-Dsuwayomi.tachidesk.config.server.initialOpenInBrowserEnabled=false".to_string(),
         "-Dsuwayomi.tachidesk.config.server.webUIInterface=browser".to_string(),
+        "-Dsuwayomi.tachidesk.config.server.systemTrayEnabled=false".to_string(),
     ];
+
+    #[cfg(target_os = "macos")]
+    {
+        // Hide the JVM child from the Dock when launched by Tauri.
+        args.push("-Dapple.awt.UIElement=true".to_string());
+    }
 
     if let Some(root_dir) = root_dir {
         args.push(format!("-Dsuwayomi.tachidesk.config.server.rootDir={root_dir}"));
@@ -450,6 +457,9 @@ mod tests {
         assert!(args
             .iter()
             .any(|arg| arg == "-Dsuwayomi.tachidesk.config.server.initialOpenInBrowserEnabled=false"));
+        assert!(args
+            .iter()
+            .any(|arg| arg == "-Dsuwayomi.tachidesk.config.server.systemTrayEnabled=false"));
         assert!(args
             .iter()
             .any(|arg| arg == "-Dsuwayomi.tachidesk.config.server.rootDir=/tmp/suwa"));
