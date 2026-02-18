@@ -12,7 +12,8 @@ main() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -o|--output-dir)
-        OUTPUT_DIR="$(readlink -e "$2" || exit 1)"
+        mkdir -p "$2"
+        OUTPUT_DIR="$(cd "$2" && pwd -P)"
         shift
         shift
         ;;
@@ -28,18 +29,20 @@ main() {
   OS="$1"
   JAR="$(ls server/build/*.jar | tail -n1)"
   RELEASE_NAME="$(echo "${JAR%.*}" | xargs basename)-$OS"
-  RELEASE_VERSION=$(echo "$JAR" | grep -oP "v\K[0-9]+\.[0-9]+\.[0-9]+")
+  RELEASE_VERSION="$(echo "$JAR" | sed -nE 's/.*-v([0-9]+\\.[0-9]+\\.[0-9]+)-r[0-9]+\\.jar/\\1/p')"
+  if [ -z "$RELEASE_VERSION" ]; then
+    error $LINENO "Failed to parse release version from $JAR" 2
+  fi
   #RELEASE_REVISION_NUMBER="$(tmp="${JAR%.*}" && echo "${tmp##*-}" | tr -d r)"
-  local electron_version="v37.2.5"
 
   # clean temporary directory on function return
   trap "rm -rf $RELEASE_NAME/" RETURN
   mkdir "$RELEASE_NAME/"
 
-  download_launcher
-
-  if [ ! -f scripts/resources/catch_abort.so ]; then
-    gcc -fPIC -shared scripts/resources/catch_abort.c -lpthread -o scripts/resources/catch_abort.so
+  if [[ "$OS" == debian-all || "$OS" == appimage || "$OS" == linux-x64 ]]; then
+    if [ ! -f scripts/resources/catch_abort.so ]; then
+      gcc -fPIC -shared scripts/resources/catch_abort.c -lpthread -o scripts/resources/catch_abort.so
+    fi
   fi
 
   JRE_ZULU="25.30.17_25.0.1"
@@ -49,6 +52,7 @@ main() {
   case "$OS" in
     debian-all)
       RELEASE="$RELEASE_NAME.deb"
+      setup_launcher
       download_jogamp "linux-*" # it's easier to bundle them ourselves than to handle Debian's path conventions
       make_deb_package
       move_release_to_output_dir
@@ -59,6 +63,7 @@ main() {
       JRE_URL="https://cdn.azul.com/zulu/bin/$JRE"
       download_jogamp "linux-amd64"
       setup_jre
+      setup_launcher
 
       RELEASE="$RELEASE_NAME.AppImage"
       make_appimage
@@ -74,11 +79,9 @@ main() {
       JRE="$ZULU_RELEASE-ca-$JRE_RELEASE-linux_x64.zip"
       JRE_DIR="${JRE%.*}"
       JRE_URL="https://cdn.azul.com/zulu/bin/$JRE"
-      ELECTRON="electron-$electron_version-linux-x64.zip"
-      ELECTRON_URL="https://github.com/electron/electron/releases/download/$electron_version/$ELECTRON"
-      download_electron
       download_jogamp "linux-amd64"
       setup_jre
+      setup_launcher
       tree "$RELEASE_NAME"
 
       RELEASE="$RELEASE_NAME.tar.gz"
@@ -89,11 +92,9 @@ main() {
       JRE="$ZULU_RELEASE-ca-$JRE_RELEASE-macosx_x64.zip"
       JRE_DIR="${JRE%.*}"
       JRE_URL="https://cdn.azul.com/zulu/bin/$JRE"
-      ELECTRON="electron-$electron_version-darwin-x64.zip"
-      ELECTRON_URL="https://github.com/electron/electron/releases/download/$electron_version/$ELECTRON"
-      download_electron
       download_jogamp "macosx-universal"
       setup_jre
+      setup_launcher
       tree "$RELEASE_NAME"
 
       RELEASE="$RELEASE_NAME.tar.gz"
@@ -104,11 +105,9 @@ main() {
       JRE="$ZULU_RELEASE-ca-$JRE_RELEASE-macosx_aarch64.zip"
       JRE_DIR="${JRE%.*}"
       JRE_URL="https://cdn.azul.com/zulu/bin/$JRE"
-      ELECTRON="electron-$electron_version-darwin-arm64.zip"
-      ELECTRON_URL="https://github.com/electron/electron/releases/download/$electron_version/$ELECTRON"
-      download_electron
       download_jogamp "macosx-universal"
       setup_jre
+      setup_launcher
       tree "$RELEASE_NAME"
 
       RELEASE="$RELEASE_NAME.tar.gz"
@@ -119,11 +118,9 @@ main() {
       JRE="$ZULU_RELEASE-ca-$JRE_RELEASE-win_x64.zip"
       JRE_DIR="${JRE%.*}"
       JRE_URL="https://cdn.azul.com/zulu/bin/$JRE"
-      ELECTRON="electron-$electron_version-win32-x64.zip"
-      ELECTRON_URL="https://github.com/electron/electron/releases/download/$electron_version/$ELECTRON"
-      download_electron
       download_jogamp "windows-amd64"
       setup_jre
+      setup_launcher
       tree "$RELEASE_NAME"
 
       RELEASE="$RELEASE_NAME.zip"
@@ -148,10 +145,26 @@ move_release_to_output_dir() {
    mv "$RELEASE" "$OUTPUT_DIR/"
 }
 
-download_launcher() {
-  LAUNCHER_URL=$(curl -s "https://api.github.com/repos/Suwayomi/Suwayomi-Launcher/releases/latest" | grep "browser_download_url" | grep ".jar" | head -n 1 | cut -d '"' -f 4)
-  curl -L "$LAUNCHER_URL" -o "Suwayomi-Launcher.jar"
-  mv "Suwayomi-Launcher.jar" "$RELEASE_NAME/Suwayomi-Launcher.jar"
+setup_launcher() {
+  local launcher_source
+  local launcher_target
+
+  if [ "$OS" = "windows-x64" ]; then
+    launcher_source="launcher/suwayomi-launcher.exe"
+    launcher_target="Suwayomi-Launcher.exe"
+  else
+    launcher_source="launcher/suwayomi-launcher"
+    launcher_target="Suwayomi-Launcher"
+  fi
+
+  if [ ! -f "$launcher_source" ]; then
+    error $LINENO "Missing launcher binary: $launcher_source. Build and download the tauri launcher artifact first." 2
+  fi
+
+  cp "$launcher_source" "$RELEASE_NAME/$launcher_target"
+  if [ "$OS" != "windows-x64" ]; then
+    chmod +x "$RELEASE_NAME/$launcher_target"
+  fi
 }
 
 download_jogamp() {
@@ -164,14 +177,6 @@ download_jogamp() {
   mkdir -p "$RELEASE_NAME/natives/"
   mv jogamp-all-platforms/lib/* "$RELEASE_NAME/natives/"
   rm -rf jogamp-all-platforms
-}
-
-download_electron() {
-  if [ ! -f "$ELECTRON" ]; then
-    curl -L "$ELECTRON_URL" -o "$ELECTRON"
-  fi
-
-  unzip "$ELECTRON" -d "$RELEASE_NAME/electron/"
 }
 
 setup_jre() {
@@ -196,7 +201,7 @@ setup_jre() {
 
 copy_linux_package_assets_to() {
   local output_dir
-  output_dir="$(readlink -e "$1" || exit 1)"
+  output_dir="$(cd "$1" && pwd -P)"
 
   cp "scripts/resources/pkg/suwayomi-server.sh" "$output_dir/"
   cp "scripts/resources/pkg/suwayomi-server.desktop" "$output_dir/"
@@ -235,7 +240,7 @@ make_deb_package() {
 
   mkdir "$RELEASE_NAME/$source_dir/"
   mv "$RELEASE_NAME/natives" "$RELEASE_NAME/$source_dir/natives"
-  mv "$RELEASE_NAME/Suwayomi-Launcher.jar" "$RELEASE_NAME/$source_dir/Suwayomi-Launcher.jar"
+  mv "$RELEASE_NAME/Suwayomi-Launcher" "$RELEASE_NAME/$source_dir/Suwayomi-Launcher"
   cp "$JAR" "$RELEASE_NAME/$source_dir/Suwayomi-Server.jar"
   copy_linux_package_assets_to "$RELEASE_NAME/$source_dir/"
   cp "scripts/resources/catch_abort.so" "$RELEASE_NAME/$source_dir/"
@@ -279,34 +284,6 @@ make_appimage() {
 }
 
 make_windows_bundle() {
-  ## I disabled this section until someone find a solution to this error:
-  ##E: Unable to correct problems, you have held broken packages.
-  ##./bundler.sh: line 250: wine: command not found
-
-  ## check if running under github actions
-  #if [ "${CI:-}" = true ]; then
-    ## change electron executable's icon
-    #sudo dpkg --add-architecture i386
-    #wget -qO - https://dl.winehq.org/wine-builds/winehq.key \
-        #| sudo apt-key add -
-    #sudo add-apt-repository ppa:cybermax-dexter/sdl2-backport
-    #sudo apt-add-repository "deb https://dl.winehq.org/wine-builds/ubuntu \
-        #$(lsb_release -cs) main"
-    #sudo apt install --install-recommends winehq-stable
-  #fi
-  ## this script assumes that wine is installed here on out
-
-  #local rcedit="rcedit-x85.exe"
-  #local rcedit_url="https://github.com/electron/rcedit/releases/download/v0.1.1/$rcedit"
-  ## change electron's icon
-  #if [ ! -f "$rcedit" ]; then
-    #curl -L "$rcedit_url" -o "$rcedit"
-  #fi
-
-  #local icon="server/src/main/resources/icon/faviconlogo.ico"
-  #WINEARCH=win32 wine "$rcedit" "$RELEASE_NAME/electron/electron.exe" \
-  #    --set-icon "$icon"
-
   mkdir "$RELEASE_NAME/bin"
   cp "$JAR" "$RELEASE_NAME/bin/Suwayomi-Server.jar"
   cp "scripts/resources/Suwayomi Launcher.bat" "$RELEASE_NAME"
@@ -323,9 +300,6 @@ make_windows_package() {
   find "$RELEASE_NAME/jre" \
   | wixl-heat --var var.SourceDir -p "$RELEASE_NAME/" \
     --directory-ref jre --component-group jre >"$RELEASE_NAME/jre.wxs"
-  find "$RELEASE_NAME/electron" \
-  | wixl-heat --var var.SourceDir -p "$RELEASE_NAME/" \
-    --directory-ref electron --component-group electron >"$RELEASE_NAME/electron.wxs"
   find "$RELEASE_NAME/natives" \
   | wixl-heat --var var.SourceDir -p "$RELEASE_NAME/" \
     --directory-ref natives --component-group natives >"$RELEASE_NAME/natives.wxs"
@@ -339,7 +313,7 @@ make_windows_package() {
 
   wixl -D ProductVersion="$RELEASE_VERSION" -D SourceDir="$RELEASE_NAME" \
     -D Icon="$icon" --arch "$arch" "scripts/resources/msi/suwayomi-server-$arch.wxs" \
-    "$RELEASE_NAME/jre.wxs" "$RELEASE_NAME/electron.wxs" "$RELEASE_NAME/natives.wxs" "$RELEASE_NAME/bin.wxs" -o "$RELEASE"
+    "$RELEASE_NAME/jre.wxs" "$RELEASE_NAME/natives.wxs" "$RELEASE_NAME/bin.wxs" -o "$RELEASE"
 }
 
 # Error handler
@@ -366,5 +340,3 @@ error() {
 trap 'error $LINENO ""' ERR
 
 main "$@"; exit
-
-

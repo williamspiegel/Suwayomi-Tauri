@@ -227,17 +227,29 @@ tasks {
         overwrite(shouldOverwrite())
     }
 
-    register("runElectron") {
+    register("runTauri") {
         group = "application"
         finalizedBy(run)
         doFirst {
+            val tauriBinary =
+                if (System.getProperty("os.name").startsWith("Windows")) {
+                    ".\\\\desktop\\\\tauri\\\\src-tauri\\\\target\\\\debug\\\\suwayomi-launcher.exe"
+                } else {
+                    "./desktop/tauri/src-tauri/target/debug/suwayomi-launcher"
+                }
             application.applicationDefaultJvmArgs =
                 listOf(
-                    "-Dsuwayomi.tachidesk.config.server.webUIInterface=electron",
-                    // Change this to the installed electron application
-                    "-Dsuwayomi.tachidesk.config.server.electronPath=/usr/bin/electron",
+                    "-Dsuwayomi.tachidesk.config.server.webUIInterface=tauri",
+                    // Change this to the installed tauri launcher application
+                    "-Dsuwayomi.tachidesk.config.server.tauriPath=$tauriBinary",
                 )
         }
+    }
+
+    register("runElectron") {
+        group = "application"
+        description = "Deprecated alias for runTauri."
+        dependsOn("runTauri")
     }
 
     runKtlintCheckOverMainSourceSet {

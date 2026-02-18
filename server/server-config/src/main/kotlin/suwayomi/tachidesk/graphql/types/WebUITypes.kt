@@ -4,6 +4,8 @@ import suwayomi.tachidesk.server.serverConfig
 
 enum class WebUIInterface {
     BROWSER,
+    TAURI,
+    // Deprecated alias kept for one transition cycle.
     ELECTRON,
 }
 

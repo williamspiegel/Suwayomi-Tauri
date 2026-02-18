@@ -1,3 +1,8 @@
+## Unreleased
+- Migrate desktop launcher from Electron/external launcher JAR to in-repo Tauri launcher.
+- Add `server.webUIInterface=tauri` and `server.tauriPath`.
+- Keep `server.webUIInterface=electron` and `server.electronPath` as deprecated compatibility aliases for one transition release cycle.
+
 # Server: v2.1.1867 + WebUI: v20250703.01 (r2643)
 
 ## TL;DR

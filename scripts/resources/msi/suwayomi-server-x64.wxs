@@ -16,7 +16,6 @@
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLDIR" Name="Suwayomi-Server" >
           <Directory Id="jre"/>
-          <Directory Id="electron"/>
           <Directory Id="natives"/>
           <Directory Id="bin"/>
         </Directory>
@@ -34,8 +33,8 @@
 
     <!-- Component -->
     <DirectoryRef Id="INSTALLDIR">
-      <Component Id="SuwayomiJAR" Guid="*" Win64="yes">
-          <File Id="Suwayomi-Launcher.jar" Source="$(var.SourceDir)/Suwayomi-Launcher.jar" KeyPath="yes" />
+      <Component Id="SuwayomiLauncherEXE" Guid="*" Win64="yes">
+          <File Id="Suwayomi-Launcher.exe" Source="$(var.SourceDir)/Suwayomi-Launcher.exe" KeyPath="yes" />
       </Component>
 
       <Component Id="SuwayomiLauncherBAT" Guid="*" Win64="yes">
@@ -59,10 +58,9 @@
     <Feature Id="Suwayomi_Server" Title="Suwayomi-Server" Level="1">
       <ComponentGroupRef Id="jre" />
       <ComponentGroupRef Id="bin" />
-      <ComponentRef Id="SuwayomiJAR" />
+      <ComponentRef Id="SuwayomiLauncherEXE" />
       <ComponentRef Id="SuwayomiLauncherBAT" />
       <ComponentRef Id="ProgramMenuDir" />
-      <ComponentGroupRef Id="electron" />
       <ComponentGroupRef Id="natives" />
     </Feature>
 

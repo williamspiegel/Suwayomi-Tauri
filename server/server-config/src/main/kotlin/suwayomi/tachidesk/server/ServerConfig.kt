@@ -173,6 +173,7 @@ class ServerConfig(
         typeInfo = SettingsRegistry.PartialTypeInfo(imports = listOf("suwayomi.tachidesk.graphql.types.WebUIInterface")),
     )
 
+    @Deprecated("Use tauriPath", replaceWith = ReplaceWith("tauriPath"))
     val electronPath: MutableStateFlow<String> by PathSetting(
         protoNumber = 12,
         group = SettingGroup.WEB_UI,
@@ -1014,6 +1015,15 @@ class ServerConfig(
         defaultValue = true,
         excludeFromBackup = true,
         description = "Use Hikari Connection Pool to connect to the database.",
+    )
+
+    val tauriPath: MutableStateFlow<String> by PathSetting(
+        protoNumber = 86,
+        group = SettingGroup.WEB_UI,
+        privacySafe = true,
+        defaultValue = "",
+        mustExist = true,
+        excludeFromBackup = true,
     )
 
 

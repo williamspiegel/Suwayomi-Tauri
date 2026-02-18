@@ -110,30 +110,100 @@ jobs:
           name: ${{ matrix.name }}-jre
           path: suwa
 
+  tauri_launcher:
+    name: Build Tauri launcher (${{ matrix.name }})
+    needs: check_wrapper
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x64
+          - os: windows-latest
+            name: windows-x64
+          - os: macos-15
+            name: macOS-arm64
+          - os: macos-15-intel
+            name: macOS-x64
+
+    steps:
+      - name: Checkout ${{ github.ref }}
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          path: master
+          fetch-depth: 0
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build launcher
+        shell: bash
+        run: cargo build --release --manifest-path master/desktop/tauri/src-tauri/Cargo.toml
+
+      - name: Collect launcher binary
+        shell: bash
+        run: |
+          mkdir -p launcher
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp master/desktop/tauri/src-tauri/target/release/suwayomi-launcher.exe launcher/suwayomi-launcher.exe
+          else
+            cp master/desktop/tauri/src-tauri/target/release/suwayomi-launcher launcher/suwayomi-launcher
+            chmod +x launcher/suwayomi-launcher
+          fi
+
+      - name: Upload launcher artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.name }}-launcher
+          path: launcher/*
+          if-no-files-found: error
+
   bundle:
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: debian-all
+            runner: ubuntu-latest
             jre: linux-x64
+            launcher: linux-x64
           - name: appimage
+            runner: ubuntu-latest
             jre: linux-x64
+            launcher: linux-x64
           - name: linux-assets
+            runner: ubuntu-latest
             jre: linux-assets
+            launcher: linux-x64
           - name: linux-x64
+            runner: ubuntu-latest
             jre: linux-x64
+            launcher: linux-x64
           - name: macOS-x64
+            runner: macos-15-intel
             jre: macOS-x64
+            launcher: macOS-x64
           - name: macOS-arm64
+            runner: macos-15
             jre: macOS-arm64
+            launcher: macOS-arm64
           - name: windows-x64
+            runner: ubuntu-latest
             jre: windows-x64
+            launcher: windows-x64
         name: [debian-all, appimage, linux-assets, linux-x64, macOS-x64, macOS-arm64, windows-x64]
 
     name: Make ${{ matrix.name }} release
-    needs: [build, jlink]
-    runs-on: ubuntu-latest
+    needs: [build, jlink, tauri_launcher]
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Download Jar
         uses: actions/download-artifact@v7
@@ -148,6 +218,13 @@ jobs:
           name: ${{ matrix.jre }}-jre
           path: jre
 
+      - name: Download Tauri launcher
+        uses: actions/download-artifact@v7
+        if: matrix.name != 'linux-assets'
+        with:
+          name: ${{ matrix.launcher }}-launcher
+          path: launcher
+
       - name: Download icons
         uses: actions/download-artifact@v7
         with:
@@ -159,11 +236,38 @@ jobs:
         with:
           name: scripts
 
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install p7zip tree
+
       - name: Make ${{ matrix.name }} release
+        shell: bash
         run: |
           mkdir upload/
           tar -xvpf scripts.tar.gz
           scripts/bundler.sh -o upload/ ${{ matrix.name }}
+
+      - name: Validate packaged artifacts
+        shell: bash
+        run: |
+          set -e
+          for artifact in upload/*; do
+            case "$artifact" in
+              *.tar.gz)
+                if tar -tf "$artifact" | grep -E "Suwayomi-Launcher\\.jar|/electron/"; then
+                  echo "Legacy electron or launcher jar content found in $artifact"
+                  exit 1
+                fi
+                ;;
+              *.zip)
+                if unzip -l "$artifact" | grep -E "Suwayomi-Launcher\\.jar|/electron/"; then
+                  echo "Legacy electron or launcher jar content found in $artifact"
+                  exit 1
+                fi
+                ;;
+            esac
+          done
 
       - name: Upload ${{ matrix.name }} files
         uses: actions/upload-artifact@v6

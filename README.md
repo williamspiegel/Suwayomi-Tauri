@@ -83,7 +83,7 @@ Here's a list of known clients/user interfaces for Suwayomi-Server (checkout the
 
 # Downloading and Running the app
 ## Using Operating System Specific Bundles
-To facilitate the use of Suwayomi we provide bundle releases that include The Java Runtime Environment, ElectronJS and the Suwayomi-Launcher.
+To facilitate the use of Suwayomi we provide bundle releases that include The Java Runtime Environment and the Tauri-based Suwayomi-Launcher.
 
 If a bundle for your operating system or cpu architecture is not provided then refer to [Advanced Methods](#advanced-methods)
 
@@ -170,11 +170,34 @@ In order to run the app you need the following:
 - The jar release of Suwayomi-Server
 - The Java Runtime Environment(JRE) 21 or newer
 - A Browser like Google Chrome, Firefox, Edge, etc.
-- ElectronJS (optional)
+- Suwayomi-Launcher (Tauri, optional)
 
 Download the latest `.jar` release from [the releases section](https://github.com/Suwayomi/Suwayomi-Server/releases) or a preview jar build from [the preview repository](https://github.com/Suwayomi/Suwayomi-Server-preview/releases).
 
 Make sure you have The Java Runtime Environment installed on your system, Double-click on the jar file or run `java -jar Suwayomi-Server-vX.Y.Z-rxxxx.jar` from a Terminal/Command Prompt window to run the app which will open a new browser window automatically.
+
+### Building a single Tauri app (server + UI in one bundle)
+The repository includes a Tauri launcher that embeds:
+- `Suwayomi-Server.jar`
+- a bundled `jre`
+- the desktop webview UI window
+
+To build it locally:
+```bash
+cargo install tauri-cli --version '^2.0'
+./scripts/build-tauri-bundle.sh
+```
+
+This script:
+1. Builds (or reuses) the latest server jar.
+2. Copies it to `desktop/tauri/src-tauri/resources/bin/Suwayomi-Server.jar`.
+3. Reuses `./jre` if present, otherwise generates one with `jlink`.
+4. Runs `cargo tauri build`.
+
+If you want repo-local runtime data/config instead of `~/Library/Application Support/Tachidesk`, run the launcher with:
+```bash
+SUWAYOMI_ROOT_DIR="$PWD/.dev-data" ./desktop/tauri/src-tauri/target/release/suwayomi-launcher
+```
 
 ### Using Suwayomi Remotely
 You can run Suwayomi on your computer or a server and connect to it remotely through one of our clients or the bundled web interface with a web browser. This method of using Suwayomi is requiring a bit of networking/firewall/port forwarding/server configuration/etc. knowledge on your side, if you can run a Minecraft server and configure it, then you are good to go.
